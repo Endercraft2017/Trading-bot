@@ -1,0 +1,29 @@
+[
+  {
+    "trained_at": "2026-03-23T16:21:17.490996",
+    "auc": 0.5833,
+    "prev_auc": 0.5833,
+    "delta": 0.0,
+    "n_trades": 64,
+    "real_trades": 1,
+    "deployed": true
+  },
+  {
+    "trained_at": "2026-03-24T00:00:03.839266",
+    "auc": 0.5556,
+    "prev_auc": 0.5833,
+    "delta": -0.0277,
+    "n_trades": 87,
+    "real_trades": 20,
+    "deployed": false
+  },
+  {
+    "trained_at": "2026-03-24T06:00:06.244458",
+    "auc": 0.5826,
+    "prev_auc": 0.5556,
+    "delta": 0.027,
+    "n_trades": 107,
+    "real_trades": 40,
+    "deployed": true
+  }
+]

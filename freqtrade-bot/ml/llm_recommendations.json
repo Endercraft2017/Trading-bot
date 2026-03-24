@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-03-24T06:00:54.350793",
+  "summary": {
+    "total_trades": 107,
+    "win_rate": 56.1,
+    "total_profit_usdt": -4.439,
+    "avg_profit_per_trade": -0.405,
+    "best_trade_pct": 2.79,
+    "worst_trade_pct": -4.93
+  },
+  "top_pairs": [
+    {
+      "pair": "SUI/USDT",
+      "trades": 3,
+      "wins": 2,
+      "avg_profit": 0.00873418760854851,
+      "total_profit": 0.29118042
+    },
+    {
+      "pair": "FIL/USDT",
+      "trades": 3,
+      "wins": 2,
+      "avg_profit": 0.007119695323149228,
+      "total_profit": 0.23457023
+    },
+    {
+      "pair": "LINK/USDT",
+      "trades": 1,
+      "wins": 1,
+      "avg_profit": 0.013053072217805394,
+      "total_profit": 0.1486716
+    },
+    {
+      "pair": "WLD/USDT",
+      "trades": 3,
+      "wins": 2,
+      "avg_profit": 0.004325442551310455,
+      "total_profit": 0.1101725
+    },
+    {
+      "pair": "SIGN/USDT",
+      "trades": 1,
+      "wins": 1,
+      "avg_profit": 0.01143305292838003,
+      "total_profit": 0.09061744
+    }
+  ],
+  "exit_reasons": [
+    {
+      "exit_reason": "stop_loss",
+      "count": 29,
+      "avg_profit": -0.03417859583047427
+    },
+    {
+      "exit_reason": "exit_signal",
+      "count": 28,
+      "avg_profit": -0.00246091315773682
+    },
+    {
+      "exit_reason": "trailing_stop_loss",
+      "count": 20,
+      "avg_profit": 0.013893779650274671
+    },
+    {
+      "exit_reason": "tp1_atr",
+      "count": 18,
+      "avg_profit": 0.010581631323159644
+    },
+    {
+      "exit_reason": "roi",
+      "count": 12,
+      "avg_profit": 0.013186224111936094
+    }
+  ],
+  "hourly_best": [
+    {
+      "hour": "12",
+      "trades": 2,
+      "avg_profit": 0.012996336850470332
+    },
+    {
+      "hour": "06",
+      "trades": 8,
+      "avg_profit": 0.01249149563363687
+    },
+    {
+      "hour": "01",
+      "trades": 2,
+      "avg_profit": 0.010924277563596055
+    }
+  ],
+  "llm_analysis": "LLM analysis unavailable",
+  "structured": {},
+  "status": "ok"
+}

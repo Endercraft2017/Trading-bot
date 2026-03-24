@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+*.egg
+
+# Data & DB
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# ML models (large binary files)
+ml/models/*.pkl
+ml/models/archive/
+
+# Logs
+user_data/logs/
+*.log
+*.log.*
+
+# Hyperopt results (large data files)
+user_data/hyperopt_results/
+user_data/backtest_results/
+
+# Lock files
+*.lock
+
+# Secrets & keys
+user_data/openrouter_key.txt
+*.env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
