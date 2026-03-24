@@ -1,7 +1,7 @@
 {
   "max_open_trades": 10,
   "stake_currency": "USDT",
-  "stake_amount": 10,
+  "stake_amount": "unlimited",
   "tradable_balance_ratio": 0.85,
   "fiat_display_currency": "USD",
   "timeframe": "1m",
@@ -21,10 +21,7 @@
     "use_order_book": true,
     "order_book_top": 1,
     "price_last_balance": 0.0,
-    "check_depth_of_market": {
-      "enabled": false,
-      "bids_to_ask_delta": 1
-    }
+    "check_depth_of_market": { "enabled": false, "bids_to_ask_delta": 1 }
   },
   "exit_pricing": {
     "price_side": "other",
@@ -35,46 +32,22 @@
     "name": "binance",
     "key": "",
     "secret": "",
-    "ccxt_config": {
-      "defaultType": "spot",
-      "enableRateLimit": true
-    },
+    "ccxt_config": { "defaultType": "spot", "enableRateLimit": true },
     "ccxt_async_config": {},
-    "pair_whitelist": [
-      "BTC/USDT",
-      "ETH/USDT",
-      "SOL/USDT",
-      "AVAX/USDT",
-      "ADA/USDT",
-      "XRP/USDT",
-      "LINK/USDT",
-      "NEAR/USDT",
-      "LTC/USDT",
-      "SUI/USDT",
-      "WLD/USDT",
-      "FIL/USDT",
-      "FET/USDT",
-      "TAO/USDT",
-      "ZEC/USDT"
-    ],
+    "pair_whitelist": [],
     "pair_blacklist": [
-      "BNB/.*",
-      ".*UP/USDT",
-      ".*DOWN/USDT",
-      ".*BULL/USDT",
-      ".*BEAR/USDT",
-      "SHIB/USDT",
-      "DOGE/USDT",
-      "PEPE/USDT",
-      "FLOKI/USDT",
-      "LUNC/USDT",
-      "LUNA/USDT"
+      "BNB/.*", ".*UP/USDT", ".*DOWN/USDT", ".*BULL/USDT", ".*BEAR/USDT",
+      "SHIB/USDT", "DOGE/USDT", "PEPE/USDT", "FLOKI/USDT", "LUNC/USDT", "LUNA/USDT"
     ]
   },
   "pairlists": [
-    {
-      "method": "StaticPairList"
-    }
+    { "method": "VolumePairList", "number_assets": 30, "sort_key": "quoteVolume", "min_value": 10000000, "refresh_period": 1800 },
+    { "method": "AgeFilter", "min_days_listed": 30 },
+    { "method": "VolatilityFilter", "lookback_days": 3, "min_volatility": 0.02, "max_volatility": 0.7 },
+    { "method": "RangeStabilityFilter", "lookback_days": 3, "min_rate_of_change": 0.015, "refresh_period": 1440 },
+    { "method": "SpreadFilter", "max_spread_ratio": 0.005 },
+    { "method": "PriceFilter", "min_price": 1e-07, "max_price": 100000 },
+    { "method": "ShuffleFilter", "seed": 42 }
   ],
   "api_server": {
     "enabled": true,
@@ -82,22 +55,20 @@
     "listen_port": 8080,
     "verbosity": "error",
     "enable_openapi": false,
-    "jwt_secret_key": "phantombot_krma_jwt_2026_secret_key_xK9mP",
-    "ws_token": "phantombot_ws_token_2026",
+    "jwt_secret_key": "CHANGE_ME_GENERATE_A_RANDOM_SECRET",
+    "ws_token": "CHANGE_ME_GENERATE_A_RANDOM_TOKEN",
     "CORS_origins": [],
-    "username": "freqtrade",
-    "password": "krma_bot_2026"
+    "username": "CHANGE_ME",
+    "password": "CHANGE_ME"
   },
   "bot_name": "PhantomBot",
   "initial_state": "running",
   "force_entry_enable": false,
-  "internals": {
-    "process_throttle_secs": 5
-  },
+  "internals": { "process_throttle_secs": 5 },
   "strategy": "PhantomStrategy",
-  "strategy-path": "/root/.openclaw/workspace/freqtrade-bot/user_data/strategies",
-  "db_url": "sqlite:////root/.openclaw/workspace/freqtrade-bot/user_data/tradesv3.sqlite",
-  "logfile": "/root/.openclaw/workspace/freqtrade-bot/user_data/logs/freqtrade.log",
+  "strategy-path": "/path/to/strategies",
+  "db_url": "sqlite:///user_data/tradesv3.sqlite",
+  "logfile": "user_data/logs/freqtrade.log",
   "dataformat_ohlcv": "json",
   "dataformat_trades": "jsongz",
   "order_types": {
@@ -109,9 +80,6 @@
     "stoploss_on_exchange": false,
     "stoploss_on_exchange_interval": 60
   },
-  "order_time_in_force": {
-    "entry": "gtc",
-    "exit": "gtc"
-  },
+  "order_time_in_force": { "entry": "gtc", "exit": "gtc" },
   "min_stake_amount": 10.0
 }

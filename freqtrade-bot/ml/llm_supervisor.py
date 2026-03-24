@@ -28,15 +28,19 @@ DB_PATH           = "/root/.openclaw/workspace/freqtrade-bot/user_data/tradesv3.
 RECOMMENDATIONS   = "/root/.openclaw/workspace/freqtrade-bot/ml/llm_recommendations.json"
 ML_META           = "/root/.openclaw/workspace/freqtrade-bot/ml/models/signal_filter_meta.json"
 
-OPENROUTER_KEY    = os.environ.get("OPENROUTER_KEY", "")
+# Load env from .env file if present
+from pathlib import Path as _Path
+_env_file = _Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 if not OPENROUTER_KEY:
-    # Fallback: read from config file if env var not set
-    _key_file = "/root/.openclaw/workspace/freqtrade-bot/user_data/openrouter_key.txt"
-    import pathlib
-    if pathlib.Path(_key_file).exists():
-        OPENROUTER_KEY = pathlib.Path(_key_file).read_text().strip()
-    else:
-        logger.warning("[LLM] OPENROUTER_KEY not set — LLM analysis disabled")
+    logger.warning("[LLM] OPENROUTER_KEY not set in environment or .env file")
 OPENROUTER_BASE   = "https://openrouter.ai/api/v1"
 
 # Free models to try in order

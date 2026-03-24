@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-03-24T06:00:54.350793",
+  "generated_at": "2026-03-24T12:00:54.988605",
   "summary": {
-    "total_trades": 107,
-    "win_rate": 56.1,
-    "total_profit_usdt": -4.439,
-    "avg_profit_per_trade": -0.405,
+    "total_trades": 117,
+    "win_rate": 57.3,
+    "total_profit_usdt": -4.6054,
+    "avg_profit_per_trade": -0.385,
     "best_trade_pct": 2.79,
     "worst_trade_pct": -4.93
   },
@@ -24,6 +24,13 @@
       "total_profit": 0.23457023
     },
     {
+      "pair": "WLD/USDT",
+      "trades": 4,
+      "wins": 3,
+      "avg_profit": 0.004907434041231254,
+      "total_profit": 0.17449338
+    },
+    {
       "pair": "LINK/USDT",
       "trades": 1,
       "wins": 1,
@@ -31,40 +38,33 @@
       "total_profit": 0.1486716
     },
     {
-      "pair": "WLD/USDT",
-      "trades": 3,
+      "pair": "AVAX/USDT",
+      "trades": 2,
       "wins": 2,
-      "avg_profit": 0.004325442551310455,
-      "total_profit": 0.1101725
-    },
-    {
-      "pair": "SIGN/USDT",
-      "trades": 1,
-      "wins": 1,
-      "avg_profit": 0.01143305292838003,
-      "total_profit": 0.09061744
+      "avg_profit": 0.009032643974129523,
+      "total_profit": 0.1320345
     }
   ],
   "exit_reasons": [
     {
       "exit_reason": "stop_loss",
-      "count": 29,
-      "avg_profit": -0.03417859583047427
+      "count": 32,
+      "avg_profit": -0.03395090238591501
     },
     {
       "exit_reason": "exit_signal",
-      "count": 28,
-      "avg_profit": -0.00246091315773682
+      "count": 29,
+      "avg_profit": -0.0021924380896965897
     },
     {
       "exit_reason": "trailing_stop_loss",
-      "count": 20,
-      "avg_profit": 0.013893779650274671
+      "count": 22,
+      "avg_profit": 0.013761042648260101
     },
     {
       "exit_reason": "tp1_atr",
-      "count": 18,
-      "avg_profit": 0.010581631323159644
+      "count": 22,
+      "avg_profit": 0.010862366889669723
     },
     {
       "exit_reason": "roi",
@@ -80,8 +80,8 @@
     },
     {
       "hour": "06",
-      "trades": 8,
-      "avg_profit": 0.01249149563363687
+      "trades": 10,
+      "avg_profit": 0.012739943949234644
     },
     {
       "hour": "01",
