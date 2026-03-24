@@ -13,8 +13,10 @@ import sqlite3
 import json
 import os
 import sys
+import shutil
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -24,7 +26,6 @@ try:
     from sklearn.ensemble import GradientBoostingClassifier
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import roc_auc_score, classification_report
-    HAS_SKLEARN = True
 except ImportError:
     print("[TRAINER] scikit-learn not installed. Run: pip install scikit-learn joblib")
     sys.exit(1)
@@ -32,22 +33,25 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 # Load .env if present
-from pathlib import Path as _Path
-_env_file = _Path(__file__).resolve().parent.parent / ".env"
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_env_file = _BASE_DIR / ".env"
 if _env_file.exists():
     for _line in _env_file.read_text().splitlines():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip())
+
 logger = logging.getLogger("PhantomTrainer")
 
-DB_PATH     = "/root/.openclaw/workspace/freqtrade-bot/user_data/tradesv3.sqlite"
-MODEL_PATH  = "/root/.openclaw/workspace/freqtrade-bot/ml/models/signal_filter.pkl"
-META_PATH   = "/root/.openclaw/workspace/freqtrade-bot/ml/models/signal_filter_meta.json"
+# Derive all paths relative to project root
+DB_PATH      = str(_BASE_DIR / "user_data" / "tradesv3.sqlite")
+MODEL_PATH   = str(_BASE_DIR / "ml" / "models" / "signal_filter.pkl")
+META_PATH    = str(_BASE_DIR / "ml" / "models" / "signal_filter_meta.json")
+ARCHIVE_DIR  = str(_BASE_DIR / "ml" / "models" / "archive")
+HISTORY_PATH = str(_BASE_DIR / "ml" / "models" / "auc_history.json")
+
 MIN_TRADES  = 10   # Minimum closed trades to train
-ARCHIVE_DIR  = "/root/.openclaw/workspace/freqtrade-bot/ml/models/archive"
-HISTORY_PATH = "/root/.openclaw/workspace/freqtrade-bot/ml/models/auc_history.json"
 PROFIT_TARGET = 0.003  # 0.3% net profit = label 1
 
 FEATURE_COLUMNS = [
@@ -64,9 +68,8 @@ def load_trades():
         logger.error(f"DB not found: {DB_PATH}")
         return None
 
-    conn = sqlite3.connect(DB_PATH)
     query = """
-        SELECT 
+        SELECT
             id, pair, close_profit, close_profit_abs,
             open_date, close_date, open_rate, close_rate,
             amount, stake_amount, fee_open, fee_close,
@@ -76,20 +79,19 @@ def load_trades():
         ORDER BY close_date ASC
     """
     try:
-        df = pd.read_sql_query(query, conn)
-        conn.close()
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql_query(query, conn)
         logger.info(f"[Trainer] Loaded {len(df)} closed trades from DB")
         return df
-    except Exception as e:
+    except (sqlite3.Error, pd.errors.DatabaseError) as e:
         logger.error(f"[Trainer] DB query failed: {e}")
-        conn.close()
         return None
 
 
 def engineer_features(trades_df: pd.DataFrame) -> pd.DataFrame:
     """
     Engineer features from trade metadata stored in enter_tag field.
-    PhantomAdaptive stores a JSON feature snapshot in enter_tag.
+    PhantomStrategy stores a JSON feature snapshot in enter_tag.
     Falls back to basic trade-level features if snapshot not available.
     """
     records = []
@@ -99,7 +101,7 @@ def engineer_features(trades_df: pd.DataFrame) -> pd.DataFrame:
         if row.get('enter_tag') and str(row['enter_tag']).startswith('{'):
             try:
                 features = json.loads(row['enter_tag'])
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 pass
 
         if features:
@@ -130,7 +132,8 @@ def engineer_features(trades_df: pd.DataFrame) -> pd.DataFrame:
             ]
 
         # Label: 1 if profit > target, 0 if not
-        net_profit = float(row['close_profit']) - float(row.get('fee_open', 0.001)) - float(row.get('fee_close', 0.001))
+        # close_profit from Freqtrade already includes fees
+        net_profit = float(row['close_profit'])
         label = 1 if net_profit >= PROFIT_TARGET else 0
 
         records.append({
@@ -149,16 +152,19 @@ def train(features_df: pd.DataFrame):
     X = features_df[FEATURE_COLUMNS].values
     y = features_df['label'].values
 
-    n_pos = y.sum()
-    n_neg = (1 - y).sum()
+    n_pos = int(y.sum())
+    n_neg = int((1 - y).sum())
     logger.info(f"[Trainer] Class distribution: {n_pos} profitable ({n_pos/len(y)*100:.1f}%), {n_neg} losing")
 
     if len(X) < MIN_TRADES:
-        logger.warning(f"[Trainer] Only {len(X)} trades — need {MIN_TRADES} minimum. Skipping.")
+        logger.warning(f"[Trainer] Only {len(X)} trades -- need {MIN_TRADES} minimum. Skipping.")
         return None, None
 
     # Split 80/20
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y if n_pos > 1 and n_neg > 1 else None)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42,
+        stratify=y if n_pos > 1 and n_neg > 1 else None
+    )
 
     model = GradientBoostingClassifier(
         n_estimators=100,
@@ -178,7 +184,7 @@ def train(features_df: pd.DataFrame):
         auc = roc_auc_score(y_test, y_pred_proba)
     else:
         auc = 0.5  # Can't compute AUC with one class
-        logger.warning("[Trainer] Only one class in test set — AUC defaulted to 0.5")
+        logger.warning("[Trainer] Only one class in test set -- AUC defaulted to 0.5")
 
     logger.info(f"[Trainer] ROC-AUC: {auc:.4f}")
     logger.info(f"[Trainer] Classification report:\n{classification_report(y_test, y_pred, zero_division=0)}")
@@ -192,8 +198,8 @@ def train(features_df: pd.DataFrame):
         "trained_at": datetime.now().isoformat(),
         "n_trades": len(features_df),
         "auc": round(auc, 4),
-        "n_positive": int(n_pos),
-        "n_negative": int(n_neg),
+        "n_positive": n_pos,
+        "n_negative": n_neg,
         "feature_importances": importances,
         "model_threshold": 0.55,
         "profit_target": PROFIT_TARGET,
@@ -204,20 +210,18 @@ def train(features_df: pd.DataFrame):
 
 
 def save_model(model, meta):
-    import shutil
+    """Save model with versioning. Only deploys if AUC meets quality threshold."""
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
     # Load previous AUC for comparison
     prev_auc = 0.0
-    prev_deploy = False
     if os.path.exists(META_PATH):
         try:
             with open(META_PATH) as f:
                 prev_meta = json.load(f)
-            prev_auc   = float(prev_meta.get('auc', 0.0))
-            prev_deploy = bool(prev_meta.get('deploy', False))
-        except Exception:
+            prev_auc = float(prev_meta.get('auc', 0.0))
+        except (json.JSONDecodeError, KeyError, ValueError):
             pass
 
     new_auc = meta['auc']
@@ -227,17 +231,13 @@ def save_model(model, meta):
     meta['prev_auc']     = round(prev_auc, 4)
     meta['auc_delta']    = round(new_auc - prev_auc, 4)
 
-    # Count real-feature trades
-    real_n = sum(1 for f in meta.get('feature_importances', {}) if False)  # placeholder, set by caller
-    meta.setdefault('real_feature_trades', 0)
-
     # Append to AUC history
     history = []
     if os.path.exists(HISTORY_PATH):
         try:
             with open(HISTORY_PATH) as f:
                 history = json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             history = []
     history.append({
         "trained_at":  meta["trained_at"],
@@ -254,6 +254,8 @@ def save_model(model, meta):
         json.dump(history, f, indent=2)
 
     # Archive current deployed model before overwriting
+    # NOTE: No file locking -- this is fine for cron (runs every 6h), but concurrent
+    # writes from multiple processes could cause issues. Not expected in practice.
     if should_deploy and os.path.exists(MODEL_PATH):
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         archive_pkl  = os.path.join(ARCHIVE_DIR, f'signal_filter_{ts}_auc{prev_auc:.4f}.pkl')
@@ -267,9 +269,9 @@ def save_model(model, meta):
             try:
                 os.remove(os.path.join(ARCHIVE_DIR, old))
                 os.remove(os.path.join(ARCHIVE_DIR, old.replace('.pkl', '_meta.json')))
-            except Exception:
+            except OSError:
                 pass
-        logger.info(f"[Trainer] Archived previous model → {archive_pkl}")
+        logger.info(f"[Trainer] Archived previous model -> {archive_pkl}")
 
     # Always write meta (for dashboard)
     with open(META_PATH, 'w') as f:
@@ -280,9 +282,9 @@ def save_model(model, meta):
         logger.info(f"[Trainer] Deployed new model  AUC={new_auc:.4f}  (was {prev_auc:.4f}, delta={new_auc-prev_auc:+.4f})")
     else:
         if new_auc < 0.55:
-            logger.warning(f"[Trainer] AUC {new_auc:.4f} < 0.55 — NOT deploying (keeping previous)")
+            logger.warning(f"[Trainer] AUC {new_auc:.4f} < 0.55 -- NOT deploying (keeping previous)")
         else:
-            logger.warning(f"[Trainer] AUC {new_auc:.4f} is worse than previous {prev_auc:.4f} — NOT deploying (keeping best)")
+            logger.warning(f"[Trainer] AUC {new_auc:.4f} is worse than previous {prev_auc:.4f} -- NOT deploying (keeping best)")
 
 
 def main():
@@ -301,10 +303,9 @@ def main():
         sys.exit(0)
 
     # Count real-feature trades (have actual indicator JSON, not placeholder)
-    real_count = sum(
-        1 for _, row in trades.iterrows()
-        if str(row.get('enter_tag', '')).startswith('{')
-    )
+    real_count = int(trades['enter_tag'].apply(
+        lambda t: str(t).startswith('{') if pd.notna(t) else False
+    ).sum())
     meta['real_feature_trades'] = real_count
     logger.info(f"[Trainer] Real-feature trades: {real_count} / {len(trades)} total")
 

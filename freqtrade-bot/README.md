@@ -157,7 +157,7 @@ cp user_data/config.example.json user_data/config_backtest.json
 freqtrade backtesting \
   --config user_data/config_backtest.json \
   --strategy PhantomStrategy \
-  --timerange 20260101-20260323
+  --timerange YYYYMMDD-YYYYMMDD
 
 # Run hyperopt optimization
 freqtrade hyperopt \

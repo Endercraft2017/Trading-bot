@@ -5,15 +5,18 @@ Analyzes trade history using OpenRouter free LLMs,
 generates strategy improvement recommendations,
 and saves them to a JSON file for the dashboard.
 
-Runs daily via cron. Uses free models — no cost.
+Runs daily via cron. Uses free models -- no cost.
 Kyle (Ender) / KRMA Security Audit Lab
 """
 import sqlite3
 import json
 import os
+import re
 import sys
+import time
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 
 try:
     from openai import OpenAI
@@ -24,13 +27,15 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger("LLMSupervisor")
 
-DB_PATH           = "/root/.openclaw/workspace/freqtrade-bot/user_data/tradesv3.sqlite"
-RECOMMENDATIONS   = "/root/.openclaw/workspace/freqtrade-bot/ml/llm_recommendations.json"
-ML_META           = "/root/.openclaw/workspace/freqtrade-bot/ml/models/signal_filter_meta.json"
+# Derive all paths relative to project root
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_env_file = _BASE_DIR / ".env"
+
+DB_PATH         = str(_BASE_DIR / "user_data" / "tradesv3.sqlite")
+RECOMMENDATIONS = str(_BASE_DIR / "ml" / "llm_recommendations.json")
+ML_META         = str(_BASE_DIR / "ml" / "models" / "signal_filter_meta.json")
 
 # Load env from .env file if present
-from pathlib import Path as _Path
-_env_file = _Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
     for _line in _env_file.read_text().splitlines():
         _line = _line.strip()
@@ -41,7 +46,10 @@ if _env_file.exists():
 OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
 if not OPENROUTER_KEY:
     logger.warning("[LLM] OPENROUTER_KEY not set in environment or .env file")
-OPENROUTER_BASE   = "https://openrouter.ai/api/v1"
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+
+# Create OpenAI client once (reused across retries)
+_llm_client = OpenAI(api_key=OPENROUTER_KEY, base_url=OPENROUTER_BASE) if OPENROUTER_KEY else None
 
 # Free models to try in order
 MODEL_CASCADE = [
@@ -64,68 +72,67 @@ def load_trade_summary():
         logger.warning(f"DB not found: {DB_PATH}")
         return None
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-
     try:
-        # Overall stats
-        cursor = conn.execute("""
-            SELECT
-                COUNT(*) as total_trades,
-                SUM(CASE WHEN close_profit > 0 THEN 1 ELSE 0 END) as wins,
-                SUM(CASE WHEN close_profit <= 0 THEN 1 ELSE 0 END) as losses,
-                AVG(close_profit) as avg_profit,
-                SUM(close_profit_abs) as total_profit_usdt,
-                MAX(close_profit) as best_trade,
-                MIN(close_profit) as worst_trade,
-                AVG(CASE WHEN close_profit > 0 THEN close_profit END) as avg_win,
-                AVG(CASE WHEN close_profit <= 0 THEN close_profit END) as avg_loss
-            FROM trades WHERE is_open = 0
-        """)
-        overall = dict(cursor.fetchone())
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
 
-        # Per-pair stats
-        cursor = conn.execute("""
-            SELECT pair,
-                COUNT(*) as trades,
-                SUM(CASE WHEN close_profit > 0 THEN 1 ELSE 0 END) as wins,
-                AVG(close_profit) as avg_profit,
-                SUM(close_profit_abs) as total_profit
-            FROM trades WHERE is_open = 0
-            GROUP BY pair ORDER BY total_profit DESC
-        """)
-        pairs = [dict(r) for r in cursor.fetchall()]
+            # Overall stats
+            cursor = conn.execute("""
+                SELECT
+                    COUNT(*) as total_trades,
+                    SUM(CASE WHEN close_profit > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN close_profit <= 0 THEN 1 ELSE 0 END) as losses,
+                    AVG(close_profit) as avg_profit,
+                    SUM(close_profit_abs) as total_profit_usdt,
+                    MAX(close_profit) as best_trade,
+                    MIN(close_profit) as worst_trade,
+                    AVG(CASE WHEN close_profit > 0 THEN close_profit END) as avg_win,
+                    AVG(CASE WHEN close_profit <= 0 THEN close_profit END) as avg_loss
+                FROM trades WHERE is_open = 0
+            """)
+            overall = dict(cursor.fetchone())
 
-        # Recent 24h trades
-        yesterday = (datetime.now() - timedelta(days=1)).isoformat()
-        cursor = conn.execute("""
-            SELECT pair, close_profit, close_profit_abs, enter_tag, exit_reason,
-                   open_date, close_date
-            FROM trades
-            WHERE is_open = 0 AND close_date > ?
-            ORDER BY close_date DESC LIMIT 50
-        """, (yesterday,))
-        recent = [dict(r) for r in cursor.fetchall()]
+            # Per-pair stats
+            cursor = conn.execute("""
+                SELECT pair,
+                    COUNT(*) as trades,
+                    SUM(CASE WHEN close_profit > 0 THEN 1 ELSE 0 END) as wins,
+                    AVG(close_profit) as avg_profit,
+                    SUM(close_profit_abs) as total_profit
+                FROM trades WHERE is_open = 0
+                GROUP BY pair ORDER BY total_profit DESC
+            """)
+            pairs = [dict(r) for r in cursor.fetchall()]
 
-        # Exit reason breakdown
-        cursor = conn.execute("""
-            SELECT exit_reason, COUNT(*) as count, AVG(close_profit) as avg_profit
-            FROM trades WHERE is_open = 0
-            GROUP BY exit_reason ORDER BY count DESC
-        """)
-        exit_reasons = [dict(r) for r in cursor.fetchall()]
+            # Recent 24h trades
+            yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+            cursor = conn.execute("""
+                SELECT pair, close_profit, close_profit_abs, enter_tag, exit_reason,
+                       open_date, close_date
+                FROM trades
+                WHERE is_open = 0 AND close_date > ?
+                ORDER BY close_date DESC LIMIT 50
+            """, (yesterday,))
+            recent = [dict(r) for r in cursor.fetchall()]
 
-        # Hourly performance
-        cursor = conn.execute("""
-            SELECT strftime('%H', open_date) as hour,
-                   COUNT(*) as trades,
-                   AVG(close_profit) as avg_profit
-            FROM trades WHERE is_open = 0
-            GROUP BY hour ORDER BY hour
-        """)
-        hourly = [dict(r) for r in cursor.fetchall()]
+            # Exit reason breakdown
+            cursor = conn.execute("""
+                SELECT exit_reason, COUNT(*) as count, AVG(close_profit) as avg_profit
+                FROM trades WHERE is_open = 0
+                GROUP BY exit_reason ORDER BY count DESC
+            """)
+            exit_reasons = [dict(r) for r in cursor.fetchall()]
 
-        conn.close()
+            # Hourly performance
+            cursor = conn.execute("""
+                SELECT strftime('%H', open_date) as hour,
+                       COUNT(*) as trades,
+                       AVG(close_profit) as avg_profit
+                FROM trades WHERE is_open = 0
+                GROUP BY hour ORDER BY hour
+            """)
+            hourly = [dict(r) for r in cursor.fetchall()]
+
         return {
             "overall": overall,
             "pairs": pairs[:15],
@@ -134,29 +141,34 @@ def load_trade_summary():
             "hourly_performance": hourly
         }
 
-    except Exception as e:
+    except (sqlite3.Error, KeyError) as e:
         logger.error(f"DB error: {e}")
-        conn.close()
         return None
 
 
 def load_ml_meta():
     if os.path.exists(ML_META):
-        with open(ML_META) as f:
-            return json.load(f)
+        try:
+            with open(ML_META) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
     return {}
 
 
 def ask_llm(prompt: str) -> str:
     """Send analysis request to OpenRouter free LLMs."""
-    client = OpenAI(api_key=OPENROUTER_KEY, base_url=OPENROUTER_BASE)
+    if _llm_client is None:
+        logger.warning("[LLM] No API key configured")
+        return ""
 
     for model in MODEL_CASCADE:
         try:
             logger.info(f"[LLM] Trying {model}...")
-            resp = client.chat.completions.create(
+            resp = _llm_client.chat.completions.create(
                 model=model,
                 max_tokens=2000,
+                timeout=30,
                 messages=[
                     {
                         "role": "system",
@@ -171,7 +183,7 @@ Be specific and data-driven. Format recommendations as a JSON object."""
             return resp.choices[0].message.content
         except Exception as e:
             logger.warning(f"[LLM] {model} failed: {str(e)[:100]}")
-            import time as _t; _t.sleep(LLM_RETRY_DELAY)
+            time.sleep(LLM_RETRY_DELAY)
             continue
 
     return ""
@@ -182,11 +194,10 @@ def parse_recommendations(llm_response: str, trade_data: dict) -> dict:
     # Try to extract JSON from response
     recommendations = {}
     try:
-        import re
         json_match = re.search(r'\{[\s\S]*\}', llm_response)
         if json_match:
             recommendations = json.loads(json_match.group())
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         pass
 
     # Always include raw analysis
@@ -228,9 +239,10 @@ def main():
             "message": "No trade data yet. Run the bot in paper mode first.",
             "llm_analysis": ""
         }
+        os.makedirs(os.path.dirname(RECOMMENDATIONS), exist_ok=True)
         with open(RECOMMENDATIONS, 'w') as f:
             json.dump(result, f, indent=2)
-        logger.info("[LLM Supervisor] No data — saved empty recommendation")
+        logger.info("[LLM Supervisor] No data -- saved empty recommendation")
         return
 
     overall = trade_data["overall"]
@@ -241,6 +253,7 @@ def main():
             "message": f"Need at least {MIN_TRADES_FOR_ANALYSIS} closed trades for analysis. Currently: {overall.get('total_trades', 0)}",
             "llm_analysis": ""
         }
+        os.makedirs(os.path.dirname(RECOMMENDATIONS), exist_ok=True)
         with open(RECOMMENDATIONS, 'w') as f:
             json.dump(result, f, indent=2)
         logger.info("[LLM Supervisor] Insufficient trades")
@@ -293,7 +306,7 @@ Based on this data, provide a JSON response with these fields:
     if llm_response:
         logger.info("[LLM Supervisor] Got LLM response, parsing...")
     else:
-        logger.warning("[LLM Supervisor] All LLM models failed — saving data only")
+        logger.warning("[LLM Supervisor] All LLM models failed -- saving data only")
 
     result = parse_recommendations(llm_response, trade_data)
 

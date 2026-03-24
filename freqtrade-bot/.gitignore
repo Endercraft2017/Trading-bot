@@ -45,3 +45,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Editor swap files
+*.swp
+*.swo
+*~
+
+# Hyperopt parameter files (may contain strategy-specific tuning data)
+user_data/strategies/*.json

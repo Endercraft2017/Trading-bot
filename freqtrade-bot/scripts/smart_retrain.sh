@@ -1,17 +1,9 @@
 #!/bin/bash
-set -euo pipefail
+source "$(dirname "$0")/common.sh"
 
-BOT_DIR="/root/.openclaw/workspace/freqtrade-bot"
 DB="$BOT_DIR/user_data/tradesv3.sqlite"
 META="$BOT_DIR/ml/models/signal_filter_meta.json"
 LOG="$BOT_DIR/user_data/logs/retrain.log"
-
-# Load environment
-if [ -f "$BOT_DIR/.env" ]; then
-    set -a
-    source "$BOT_DIR/.env"
-    set +a
-fi
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -34,9 +26,9 @@ NEW_SINCE_LAST=$((REAL_TRADES - LAST_TRAINED_COUNT))
 echo "[$(date)] Real-feature trades: $REAL_TRADES total, $LAST_TRAINED_COUNT at last train, $NEW_SINCE_LAST new" >> "$LOG"
 
 if [ "$NEW_SINCE_LAST" -ge 10 ]; then
-    echo "[$(date)] Threshold met — retraining..." >> "$LOG"
+    echo "[$(date)] Threshold met -- retraining..." >> "$LOG"
     python3 "$BOT_DIR/ml/trainer.py" >> "$LOG" 2>&1
     echo "[$(date)] Retrain complete." >> "$LOG"
 else
-    echo "[$(date)] Only $NEW_SINCE_LAST new real trades — skipping (need 10)" >> "$LOG"
+    echo "[$(date)] Only $NEW_SINCE_LAST new real trades -- skipping (need 10)" >> "$LOG"
 fi

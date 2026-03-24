@@ -1,15 +1,7 @@
 #!/bin/bash
-set -euo pipefail
+source "$(dirname "$0")/common.sh"
 
-BOT_DIR="/root/.openclaw/workspace/freqtrade-bot"
 LOG="$BOT_DIR/user_data/logs/hyperopt_apply.log"
-
-# Load environment
-if [ -f "$BOT_DIR/.env" ]; then
-    set -a
-    source "$BOT_DIR/.env"
-    set +a
-fi
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -31,6 +23,12 @@ if [ -z "$BEST_JSON" ]; then
     exit 1
 fi
 
+# Validate JSON before writing
+if ! python3 -c "import json, sys; json.loads(sys.argv[1])" "$BEST_JSON" 2>/dev/null; then
+    echo "[$(date)] ERROR: Invalid JSON from hyperopt: $BEST_JSON" >> "$LOG"
+    exit 1
+fi
+
 echo "[$(date)] Best parameters: $BEST_JSON" >> "$LOG"
 
 # Write params to JSON file (Freqtrade auto-loads)
@@ -38,9 +36,18 @@ PARAM_FILE="$BOT_DIR/user_data/strategies/PhantomStrategy.json"
 echo "$BEST_JSON" > "$PARAM_FILE"
 echo "[$(date)] Parameters written to $PARAM_FILE" >> "$LOG"
 
+# Dynamic timerange: last 3 months
+TIMERANGE_START=$(date -d '3 months ago' +%Y%m%d 2>/dev/null || date -v-3m +%Y%m%d 2>/dev/null || echo "20260101")
+TIMERANGE_END=$(date +%Y%m%d)
+
 # Validation backtest
-echo "[$(date)] Running validation backtest..." >> "$LOG"
-RESULT=$(freqtrade backtesting     --config user_data/config_backtest.json     --strategy PhantomStrategy     --userdir user_data     --timerange 20260101-20260323     2>&1 | grep -E "Total profit|Win  Draw|Profit factor|Sharpe" | head -10 || true)
+echo "[$(date)] Running validation backtest (${TIMERANGE_START}-${TIMERANGE_END})..." >> "$LOG"
+RESULT=$(freqtrade backtesting \
+    --config user_data/config_backtest.json \
+    --strategy PhantomStrategy \
+    --userdir user_data \
+    --timerange "${TIMERANGE_START}-${TIMERANGE_END}" \
+    2>&1 | grep -E "Total profit|Win  Draw|Profit factor|Sharpe" | head -10 || true)
 
 echo "[$(date)] Validation result:" >> "$LOG"
 echo "$RESULT" >> "$LOG"
